@@ -1,20 +1,24 @@
-module uart_to_nand(uart_rx, uart_tx, clk, rst, we, ale, cle, ce, re, io, io_drive_en); //rb2
+module uart_to_nand(uart_rx, uart_tx, 
+					clk, rst, io_drive_en,
+					we, ale, cle, ce, re, io, io_write); //rb2
 	parameter CMD_SIZE = 7; //2120; //1 + 5 + 2 + 2112 = 2120
 
 	input uart_rx, clk, rst;
 	output uart_tx;
-	output we, ale, cle, ce, re;
+	(* mark_debug = "true" *) output we, ale, cle, ce, re;
 	inout [7:0] io;
+	tri [7:0] io;
 
 	//"R:0000000000:<payload>"
 
 	reg nand_io_ready;
 	wire [7:0] cmd_rambus;
 	wire [11:0] nand_cnt_ram_addr;
-	wire io_drive_en;
+	(* mark_debug = "true" *) output io_drive_en;
+	(* mark_debug = "true" *) output [7:0] io_write; 
 	nand_controller nand_io(cmd_rambus, nand_cnt_ram_addr, nand_cnt_ram_r_e,
-							cle, ce, re, ale, we, io, 
-							nand_io_ready, clk, rst, io_drive_en);
+	                        cle, ce, re, ale, we, io, 
+	                        io_write,nand_io_ready, clk, rst, io_drive_en);
 
 	wire [11:0] cmd_out;
 	reg cmd_up, cmd_set;

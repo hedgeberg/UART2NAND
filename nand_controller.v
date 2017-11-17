@@ -1,11 +1,12 @@
 `define CMD_SIZE 7
 
 module nand_controller(ram_in, ram_addr, ram_re, //ram_we, ram_out //ram signals 
-						cle, ce, re, ale, we, io, //r_b, //nand signals
+						cle, ce, re, ale, we, io, io_write,//r_b, //nand signals
 						ready, clk, rst, io_drive_en); //control signals
 
 	input  [7:0] ram_in;
 	inout  [7:0] io;
+	tri    [7:0] io;
 	//output [7:0] ram_out;
 	input ready;
 	input clk, rst;
@@ -32,8 +33,8 @@ module nand_controller(ram_in, ram_addr, ram_re, //ram_we, ram_out //ram signals
 								cmd_pos_in, cmd_pos, clk);
 	
     output reg io_drive_en; 
-	reg [7:0] io_write;
-	ts_buf #(8) io_ts_buf(io_write, io, io_drive_en);
+	output reg [7:0] io_write;
+	//ts_buf #(8) io_ts_buf(io_write, io, io_drive_en);
 
 	//assign io = (io_drive_en) ? io_write : 8'bzzzzzzzz;
 	
@@ -191,6 +192,8 @@ module nand_controller(ram_in, ram_addr, ram_re, //ram_we, ram_out //ram signals
 		else ale = 0; 
 
 		if(state == addr_cyc_lo) we = 0;
+		else if(state == cmd_cyc_1_1) we = 0;
+		else if(state == cmd_cyc_2_1) we = 0;
 		else we = 1;
 
 		terminal_pos = `CMD_SIZE; 
