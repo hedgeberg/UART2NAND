@@ -1,7 +1,7 @@
 module chipinterface(tx, rx, 
 					rst_bnc, 
-					we, ale, cle, ce, re, io, wp, io_drive_en);
-	input rx, rst_bnc;
+					we, ale, cle, ce, re, io, wp, rb, io_drive_en);
+	input rx, rst_bnc, rb;
 	output tx, wp;
 
 	output ale, we, cle, ce, re;
@@ -24,5 +24,5 @@ module chipinterface(tx, rx,
     
 	uart_to_nand ni(rx, tx, 
 					clk, rst, io_drive_en,
-					we, ale, cle, ce, re, io, io_write);
+					we, ale, cle, ce, re, rb, io, io_write);
 endmodule // chipinterface
