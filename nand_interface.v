@@ -1,24 +1,25 @@
 module uart_to_nand(uart_rx, uart_tx, 
 					clk, rst, io_drive_en,
 					we, ale, cle, ce, re, rb, io, io_write); //rb2
-	parameter CMD_SIZE = 7; //2120; //1 + 5 + 2 + 2112 = 2120
+	parameter CMD_SIZE = 2120; //1 + 5 + 2 + 2112 = 2120
 
 	input uart_rx, clk, rst, rb;
 	output uart_tx;
 	(* mark_debug = "true" *) output we, ale, cle, ce, re;
-	inout [7:0] io;
-	tri [7:0] io;
-
+	input[7:0] io;
 	//"R:0000000000:<payload>"
 
 	reg nand_io_ready;
 	wire [7:0] cmd_rambus;
+	tri [7:0] cmd_rambus;
 	wire [11:0] nand_cnt_ram_addr;
 	output io_drive_en;
-	output [7:0] io_write; 
-	nand_controller nand_io(cmd_rambus, nand_cnt_ram_addr, nand_cnt_ram_r_e,
+	output [7:0] io_write;
+	wire nand_cnt_ram_w_e, nand_comm_done;
+	wire [7:0] nand_cnt_ram_out; 
+	nand_controller nand_io(cmd_rambus, nand_cnt_ram_addr, nand_cnt_ram_r_e, nand_cnt_ram_w_e, nand_cnt_ram_out,
 	                        cle, ce, re, ale, we, rb, io, io_write,
-	                        nand_io_ready, clk, rst, io_drive_en);
+	                        nand_io_ready, clk, rst, io_drive_en, nand_comm_done);
 
 	wire [11:0] cmd_out;
 	reg cmd_up, cmd_set;
@@ -34,15 +35,16 @@ module uart_to_nand(uart_rx, uart_tx,
 	uart_out #(866, 8) tx(tx_byte, tx_ready, rst, uart_tx, uart_tx_done, clk);
 
 
-	reg cmd_r_e, cmd_w_e;
+	reg cmd_r_e, cmd_w_e, ram_w_e;
 	wire r_e;
 	assign r_e = nand_cnt_ram_r_e | cmd_r_e;
 	wire [11:0] cmd_addr;
 	assign cmd_addr = cmd_out;
 	reg [11:0] ram_addr;
-	ts_buf #(8) rambus_write_buffer(rx_byte, cmd_rambus, cmd_w_e);
-	simple_ram #(8, 12, 4*1024) cmd_store(cmd_rambus, ram_addr, 
-										  r_e, cmd_w_e, clk);
+	reg [7:0] rambus_write_line;
+	//ts_buf #(8) rambus_write_buffer(rambus_write_line, cmd_rambus, ram_w_e); //rx_byte -> rambus_write_line = (rx_byte else nand_cnt_ram_out) //cmd_w_e -> ram_w_e = (cmd_w_e else nand_cnt_ram_w_e)
+	simple_ram #(8, 12, 4*1024) cmd_store(rambus_write_line, cmd_rambus, 
+										ram_addr, r_e, ram_w_e, clk);
 
 	reg snd_latch_set, snd_latch_reset;
 	sr_latch snd_byte_latch(cmd_rambus, tx_byte, clk, 
@@ -70,7 +72,10 @@ module uart_to_nand(uart_rx, uart_tx,
 			uart_rcv_new_byte: begin 
 				state <= uart_rcv_wait;
 			end
-			init_nand_io: state <= init_nand_io;
+			init_nand_io: begin 
+				if(nand_comm_done == 1) state <= ram_request_byte;
+				else state <= init_nand_io;
+			end
 			uart_snd_wait: begin 
 				if(uart_tx_done) begin
 					if(cmd_out == CMD_SIZE) state <= init; 
@@ -126,6 +131,12 @@ module uart_to_nand(uart_rx, uart_tx,
 
 		if(state == init_nand_io) ram_addr = nand_cnt_ram_addr;
 		else ram_addr = cmd_addr;
+
+		if(state == init_nand_io) rambus_write_line = nand_cnt_ram_out;
+		else rambus_write_line = rx_byte;
+
+		if(state == init_nand_io) ram_w_e = nand_cnt_ram_w_e;
+		else ram_w_e = cmd_w_e;
 
 	end
 

@@ -1,24 +1,24 @@
 `define CMD_SIZE 7
+`define NUM_ADDR 2112 //2048 + 64
 
-module nand_controller(ram_in, ram_addr, ram_re, //ram_we, ram_out //ram signals 
+module nand_controller(ram_in, ram_addr, ram_re, ram_we, ram_out, //ram signals 
 						cle, ce, re, ale, we, rb, io, io_write,//r_b, //nand signals
-						ready, clk, rst, io_drive_en); //control signals
+						ready, clk, rst, io_drive_en, comm_done); //control signals
 
 	input  [7:0] ram_in;
-	inout  [7:0] io;
-	tri    [7:0] io;
-	//output [7:0] ram_out;
+	input  [7:0] io;
+	output [7:0] ram_out;
 	input ready;
 	input clk, rst, rb;
 	output [11:0] ram_addr;
-	output reg ram_re; //, ram_we;
-	output reg ce, cle, re, ale, we;
+	output reg ram_re, ram_we;
+	output reg ce, cle, re, ale, we, comm_done;
 
 	reg [7:0] cmd_reg [0:6];
 
 	reg ram_addr_up, ram_addr_set;
 	reg [11:0] ram_addr_in;
-	uds_counter #(12) addr_counter(ram_addr_up, 1'b0, ram_addr_set, 
+	uds_counter #(12, 4096) addr_counter(ram_addr_up, 1'b0, ram_addr_set, 
 							 ram_addr_in, ram_addr, clk);
 
 
@@ -38,10 +38,11 @@ module nand_controller(ram_in, ram_addr, ram_re, //ram_we, ram_out //ram signals
 
 	//assign io = (io_drive_en) ? io_write : 8'bzzzzzzzz;
 	
+	assign ram_out = io;
 	reg [3:0] terminal_pos;
 	reg [3:0] cyc_time;
 	reg [4:0] state; 
-	reg [4:0] num_read_cycles;
+	reg [11:0] num_read_cycles;
 	//output logic
 	//LUT for command bytes 1 & 2
 	//fix cmd_pos references
@@ -52,18 +53,19 @@ module nand_controller(ram_in, ram_addr, ram_re, //ram_we, ram_out //ram signals
 			  cmd_cyc_1_2 = 6, addr_cyc_lo = 7, addr_cyc_hi = 8, 
 			  cmd_cyc_2_pre = 9, cmd_cyc_2_0 = 10, cmd_cyc_2_1 = 11, 
 			  cmd_cyc_2_2 = 12, rb_wait_lo = 13, rb_wait_hi = 14,
-			  read_cycle_hi = 15, read_cycle_lo = 16, end_latch = 17;
+			  read_cycle_hi = 15, read_cycle_lo = 16, write_to_ram = 17, 
+			  done = 18;
 
 	initial begin 
 		state <= init;
 		num_read_cycles <= 0;
-		cyc_time <= 3'b0;
 	end 
 
 	always @(posedge clk) begin 
 		if(rst) state <= init;
 		else case(state)
 			init: begin 
+				num_read_cycles <= 12'h000;
 				state <= wait_for_ready;
 				cyc_time <= 3'b0;
 			end 
@@ -134,7 +136,8 @@ module nand_controller(ram_in, ram_addr, ram_re, //ram_we, ram_out //ram signals
 				else state <= rb_wait_hi;
 			end
 			read_cycle_hi: begin 
-				if(cyc_time > 10) begin 
+				if(num_read_cycles == `NUM_ADDR ) state <= done;
+				else if(cyc_time > 10) begin 
 					state <= read_cycle_lo;
 					cyc_time <= 0;
 				end 
@@ -146,18 +149,16 @@ module nand_controller(ram_in, ram_addr, ram_re, //ram_we, ram_out //ram signals
 			read_cycle_lo: begin 
 				if(cyc_time > 10) begin 
 					cyc_time <= 0;
-					if(num_read_cycles > 20) state <= end_latch; 
-					else begin 
-						state <= read_cycle_hi;
-						num_read_cycles <= num_read_cycles + 1;
-					end
-				end 
+					state <= write_to_ram;
+					num_read_cycles <= num_read_cycles + 1;
+				end
 				else begin 
 					state <= read_cycle_lo;
 					cyc_time <= cyc_time + 1;
 				end
 			end
-			end_latch: state <= end_latch;
+			write_to_ram: state <= read_cycle_hi;
+			done: state <= init;
 			//control a LUT for the different commands
 			//branch based off r/w vs d
 			//command cycle 1
@@ -185,16 +186,17 @@ module nand_controller(ram_in, ram_addr, ram_re, //ram_we, ram_out //ram signals
 		else if((cmd_cyc_2_0 <= state) && 
 		   (state <= cmd_cyc_2_2)) io_write = 8'h30;
 		else if((addr_cyc_lo <= state) && 
-		   (state <= addr_cyc_hi)) io_write = 8'h00; //curr_cmd_val;
+		   (state <= addr_cyc_hi)) io_write = curr_cmd_val;
 		else io_write = 8'h00;
 		
-		if(state == read_cmd_to_reg) ram_addr_up = 1;
+		if((state == read_cmd_to_reg) || (state == write_to_ram)) ram_addr_up = 1;
 		else ram_addr_up = 0;
 		
-		if(state == init) ram_addr_set = 1;
+		if((state == init) || (state == rb_wait_hi)) ram_addr_set = 1;
 		else ram_addr_set = 0;
 
-		ram_addr_in = 12'h000;
+		if(state == rb_wait_hi) ram_addr_in = `CMD_SIZE + 1;
+		else ram_addr_in = 12'h000;
 
 		if((addr_cyc_lo <= state) && 
 		   (state <= cmd_cyc_2_pre)) dly_cnt_en = 1;
@@ -233,9 +235,13 @@ module nand_controller(ram_in, ram_addr, ram_re, //ram_we, ram_out //ram signals
 
 		terminal_pos = `CMD_SIZE; 
 
-		//ram_we
+		if(state == write_to_ram) ram_we = 1;
+		else ram_we	 = 0;
+		
+		//ram_out = io; 
 
-
+		if(state == done) comm_done = 1;
+		else comm_done = 0;
 	end
 
 endmodule

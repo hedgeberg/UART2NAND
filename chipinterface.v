@@ -6,7 +6,6 @@ module chipinterface(tx, rx,
 
 	output ale, we, cle, ce, re;
 	inout [7:0] io;
-	tri [7:0] io;
 	
 	assign wp = 0; 
 	
