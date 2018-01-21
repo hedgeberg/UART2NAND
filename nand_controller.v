@@ -109,7 +109,8 @@ module nand_controller(ram_in, ram_addr, ram_re, ram_we, ram_out, //ram signals
 				else state <= addr_cyc_hi;
 			end 
 			cmd_cyc_2_pre: begin 
-				if(dly_cnt >= 100) state <= cmd_cyc_2_0;
+				if((cmd_reg[0] == 8'h45) && (dly_cnt >= 17)) state <= cmd_cyc_2_0;
+				else if(dly_cnt >= 100) state <= cmd_cyc_2_0;
 				else state <= cmd_cyc_2_pre;
 			end 
 			cmd_cyc_2_0: state <= cmd_cyc_2_1;
@@ -171,6 +172,8 @@ module nand_controller(ram_in, ram_addr, ram_re, ram_we, ram_out, //ram signals
 	wire [7:0] curr_cmd_val;
 	assign curr_cmd_val = cmd_reg[cmd_pos];
 
+	reg [7:0] cmd_byte_0, cmd_byte_1; 
+
 	//output logic 
 	always @* begin 
 		if((state == ram_req_cmd_read) || 
@@ -181,10 +184,21 @@ module nand_controller(ram_in, ram_addr, ram_re, ram_we, ram_out, //ram signals
 		   (state <= cmd_cyc_2_2)) io_drive_en = 1;
 		else io_drive_en = 0;
 
+		if(	cmd_reg[0] == 8'h45) begin //E
+			cmd_byte_0 = 8'h60;
+			cmd_byte_1 = 8'hD0;
+		end else if(cmd_reg[0] == 8'h52) begin //R 
+			cmd_byte_0 = 8'h00;
+			cmd_byte_1 = 8'h30;
+		end else begin 
+			cmd_byte_0 = 8'h00;
+			cmd_byte_1 = 8'h00;
+		end 
+
 		if((cmd_cyc_1_0 <= state) && 
-		   (state <= cmd_cyc_1_2)) io_write = 8'h00;
+		   (state <= cmd_cyc_1_2)) io_write = cmd_byte_0; //define and configure a register for cmd byte 0
 		else if((cmd_cyc_2_0 <= state) && 
-		   (state <= cmd_cyc_2_2)) io_write = 8'h30;
+		   (state <= cmd_cyc_2_2)) io_write = cmd_byte_1; //define and configure a reg for cmd byte 1
 		else if((addr_cyc_lo <= state) && 
 		   (state <= addr_cyc_hi)) io_write = curr_cmd_val;
 		else io_write = 8'h00;
@@ -233,7 +247,8 @@ module nand_controller(ram_in, ram_addr, ram_re, ram_we, ram_out, //ram signals
 		else if(state == cmd_cyc_2_1) we = 0;
 		else we = 1;
 
-		terminal_pos = `CMD_SIZE; 
+		if(cmd_reg[0] == 8'h45) terminal_pos = (`CMD_SIZE - 2); //make terminal_pos variable
+		else terminal_pos = `CMD_SIZE;
 
 		if(state == write_to_ram) ram_we = 1;
 		else ram_we	 = 0;
