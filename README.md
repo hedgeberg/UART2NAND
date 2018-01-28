@@ -26,7 +26,7 @@ Data is 2112 bytes (2048 data bytes + 64 "spare" bytes)
 Each field needs 1 byte between them. This byte will be ignored by the hardware, meaning the developer can use whatever character they choose for separation. I used ":", resulting in a command structure that looked like:
 
 ```
-P:iiiii:xxxxxxxx....xxxx (dots fill in space so that there are 2112 x's
+P:iiiii:xxxxxxxx....xxxx (dots fill in space so that there are 2112 x's)
 ```
 
 In this example, we write to address 0x6969696969 ("iiiii") (not normally accessible on any SLC flash chip), and write the byte 0x78 2112 times. 
