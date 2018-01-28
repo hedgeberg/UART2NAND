@@ -3,45 +3,49 @@ import serial
 import struct
 ser = 0
 
+def prog_page(address, data):
+	global ser
+	command_char = "P"
+	dummy_payload = "x"*2112
+	command = bytes((command_char + ":" + address + ":"), 'ascii') + data
+	ser.write(command)
+	for i in range(len(command)): 
+		ser.read()
+	return 1
+
 def erase_page(address):
 	global ser
 	command_char = "E"
 	dummy_payload = "0"*2112
-	command = command_char + ":" + address + "00" + ":" + dummy_payload
-	ser.write(command)
-	return
+	command = command_char + ":" + address + ":" + dummy_payload
+	ser.write(bytes(command, 'ascii'))
+	k = bytes([])
+	for i in range(len(command)):
+		k += ser.read()
+	return 1
 
 def read_data(address):
 	global ser
 	command_char = "R"
 	dummy_payload = "0"*2112
 	command = command_char + ":" + address + ":" + dummy_payload
-	ser.write(command)
-	k = ""
-	for i in xrange(len(command)):
+	ser.write(bytes(command, 'ascii'))
+	k = bytes([])
+	for i in range(len(command)):
 		k += ser.read()
-
-	return k
+	return k[8:]
 
 
 def main():
 	global ser
 	ser = serial.Serial('/dev/ttyUSB0')
 	ser.baudrate = 115200
-	addr = chr(0)*2 + chr(2)
+	addr = chr(0)*2 + chr(2) + chr(0)*2
+	data = read_data(addr)
 	erase_page(addr)
-	print "done"
-
-	#with open("./nand_dump.bin", "wb") as dumpfile:
-	#	for i in xrange(0x1D):
-	#		print ".",
-	#		if ((i % 16) == 0 ):
-	#			print i
-	#		addr = struct.pack("BBBBB", 0, 0, i, 0, 0) 
-	#		k = read_data(addr)
-	#		dumpfile.write(k[8:])
-	#		dumpfile.write("\0"*(4096-len(k[8:])))
-	
+	prog_page(addr, data)
+	#now do whatever you want here. 
+	print("done")
 	return
 
 if __name__ == "__main__":
